@@ -3,9 +3,18 @@ import 'package:html/parser.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/dom.dart' as dom;
 import 'package:my_scanner/models/news.dart';
+import 'package:my_scanner/models/task.dart';
 
 Future<void> main() async {
-  await startParsingProcess('http://ccs.nau.edu.ua/');
+  ///Please select number of task
+  final taskNumber = Task.firstTask;
+
+  if (taskNumber == Task.firstTask) {
+    await startFirstTaskParsingProcess('http://ccs.nau.edu.ua/', taskNumber);
+  } else {
+    await startSecondTaskParsingProcess('http://ccs.nau.edu.ua/', taskNumber);
+    // await startSecondTaskParsingProcess('https://nau.edu.ua/', taskNumber);
+  }
 }
 
 final requestedParameters = [
@@ -14,28 +23,43 @@ final requestedParameters = [
   'Артамонов Є.Б',
 ];
 
-Future<void> startParsingProcess(String url) async {
+Future<void> startFirstTaskParsingProcess(String url, Task taskNumber) async {
   final mainPageResponse = await validateResponse(url);
   final newsUrl =
       mainPageResponse != null ? responseGetNewsLink(mainPageResponse) : null;
   if (newsUrl != null) {
-    final allNews = await getAllNewsFromUrl(newsUrl);
-    final newsByParameters = allNews.where((element) => element.ifNewsContainParameters(requestedParameters));
+    final allNews = await getAllNewsFromUrl(newsUrl, taskNumber);
+    print('Загальна кількість новин ${allNews.length}');
+  } else {
+    print('check url');
+  }
+}
+
+Future<void> startSecondTaskParsingProcess(String url, Task taskNumber) async {
+  int counter = 1;
+  final mainPageResponse = await validateResponse(url);
+  final newsUrl =
+      mainPageResponse != null ? responseGetNewsLink(mainPageResponse) : null;
+  if (newsUrl != null) {
+    final allNews = await getAllNewsFromUrl(newsUrl, taskNumber);
+    final newsByParameters = allNews.where(
+        (element) => element.ifNewsContainParameters(requestedParameters));
     for (var element in newsByParameters) {
-      print(element.title);
+      print('$counter ${element.title}');
+      counter += 1;
     }
   } else {
     print('check url');
   }
 }
 
-Future<List<News>> getAllNewsFromUrl(String newsUrl) async {
+Future<List<News>> getAllNewsFromUrl(String newsUrl, Task taskNumber) async {
   final List<String> linksOnAllPagesWithNews = [newsUrl];
   final firstNewsPageResponse = await validateResponse(newsUrl);
   if (firstNewsPageResponse != null) {
     final firstNewsPageDocument = parse(firstNewsPageResponse.body);
     final allPagesWithNewsLinks =
-        getAllPagesWithNewsLinks(firstNewsPageDocument);
+        getAllPagesWithNewsLinks(firstNewsPageDocument, taskNumber);
     linksOnAllPagesWithNews.addAll(allPagesWithNewsLinks);
   }
   return getAllNewsFromNewsLinks(linksOnAllPagesWithNews);
@@ -72,17 +96,41 @@ dom.Document getDocumentFromResponse(http.Response response) {
   return parse(response.body);
 }
 
-List<String> getAllPagesWithNewsLinks(dom.Document document) {
-  final links = <String>[];
-  final classPagination = document.getElementsByClassName('pagination');
-  final elements = classPagination.first.querySelectorAll('a');
-  for (final element in elements) {
-    final href = element.attributes['href'];
-    if (href != null && href.isNotEmpty) {
-      links.add(href);
+List<String> getAllPagesWithNewsLinks(dom.Document document, Task taskNumber) {
+  if (taskNumber == Task.firstTask) {
+    final links = <String>[];
+    final classPagination = document.getElementsByClassName('pagination');
+    final elements = classPagination.first.querySelectorAll('a');
+    for (final element in elements) {
+      final href = element.attributes['href'];
+      if (href != null && href.isNotEmpty) {
+        links.add(href);
+      }
+    }
+    return links.toSet().toList();
+  } else {
+    final links = <String>[];
+    final classPagination = document.getElementsByClassName('pagination');
+    final elements = classPagination.first.querySelectorAll('a');
+    for (final element in elements) {
+      final href = element.attributes['href'];
+      if (href != null && href.isNotEmpty) {
+        links.add(href);
+      }
+    }
+    return links.toSet().toList();
+  }
+}
+
+String? responseGetNewsLink(http.Response response) {
+  final document = parse(response.body);
+  final links = document.getElementsByTagName('a').toList();
+  for (var element in links) {
+    if (element.text == 'Новини') {
+      return element.attributes['href'];
     }
   }
-  return links.toSet().toList();
+  return null;
 }
 
 List<String> getAllLinksFromArticles(dom.Document document) {
@@ -133,15 +181,4 @@ String? getEntryContent(dom.Document document) {
     result += ' ${element.text}';
   });
   return result;
-}
-
-String? responseGetNewsLink(http.Response response) {
-  final document = parse(response.body);
-  final links = document.getElementsByTagName('a').toList();
-  for (var element in links) {
-    if (element.text == 'Новини') {
-      return element.attributes['href'];
-    }
-  }
-  return null;
 }
